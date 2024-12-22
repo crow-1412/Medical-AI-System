@@ -52,22 +52,34 @@ class KnowledgeManager:
     async def initialize(self):
         """初始化知识库"""
         try:
-            # 加载文档
+            # 1. 加载默认文档
+            self._initialize_default_documents()
+            logger.info(f"加载了 {len(self.documents)} 个默认文档")
+            
+            # 2. 尝试加载额外文档
             self._load_documents()
             
-            # 如果没有文档，从爬取的数据导入
-            if not self.documents:
-                await self.import_crawled_data()
-                
-            # 构建索引
-            if self.documents:
-                self._build_index()
-                logger.info(f"知识库初始化完成，包含 {len(self.documents)} 个文档")
+            # 3. 立即构建索引
+            texts = [doc["content"] for doc in self.documents]
+            if not texts:
+                logger.warning("没有找到任何文档，创建空索引")
+                # 创建空索引
+                self.index = faiss.IndexFlatL2(384)  # 使用默认维度
             else:
-                logger.warning("没有找到任何文档数据")
+                logger.info(f"开始为 {len(texts)} 个文档构建索引")
+                embeddings = self.encoder.encode(texts)
+                vector_dim = embeddings.shape[1]
                 
+                self.index = faiss.IndexFlatL2(vector_dim)
+                embeddings_array = np.array(embeddings).astype('float32')
+                self.index.add(embeddings_array)
+                
+                logger.info(f"索引构建完成，维度: {vector_dim}")
+            
         except Exception as e:
             logger.error(f"初始化知识库失败: {str(e)}")
+            # 确保即使出错也创建一个空索引
+            self.index = faiss.IndexFlatL2(384)
             raise
         
     def _load_documents(self):
@@ -111,18 +123,23 @@ class KnowledgeManager:
         
     async def search(self, query: str, k: int = 5) -> List[Dict[str, Any]]:
         """搜索相关文档"""
-        if not self.index:
-            logger.warning("索引未初始化，无法执行搜索")
-            return []
-            
         try:
+            if self.index is None:
+                logger.warning("索引未初始化，创建空索引")
+                self.index = faiss.IndexFlatL2(384)
+                return []
+            
+            if self.index.ntotal == 0:
+                logger.warning("索引为空，无法搜索")
+                return []
+            
             # 编码查询
             query_vector = self.encoder.encode([query])[0]
             
             # 搜索最相关的文档
             distances, indices = self.index.search(
                 np.array([query_vector]).astype('float32'), 
-                k
+                min(k, self.index.ntotal)  # 确保k不超过索引中的文档数
             )
             
             # 返回结果
@@ -136,7 +153,7 @@ class KnowledgeManager:
             
         except Exception as e:
             logger.error(f"搜索失败: {str(e)}")
-            raise 
+            return []
 
     async def import_crawled_data(self):
         """导入爬取的数据到知识库"""
@@ -255,3 +272,38 @@ class KnowledgeManager:
         except Exception as e:
             logger.error(f"更新索引失败: {str(e)}")
             raise
+
+    def _initialize_default_documents(self):
+        """初始化默认医学文档"""
+        default_docs = [
+            {
+                "title": "高血压基础知识",
+                "content": """高血压是常见的慢性病，主要表现为血压升高。诊断标准：
+1. 收缩压≥140mmHg和/或舒张压≥90mmHg
+2. 分级标准：
+   - 1级：140-159/90-99mmHg
+   - 2级：160-179/100-109mmHg
+   - 3级：≥180/≥110mmHg""",
+                "type": "knowledge"
+            },
+            {
+                "title": "高血压症状",
+                "content": """常见症状包括：
+1. 头痛、头晕、眩晕
+2. 心悸、胸闷、气短
+3. 疲劳、乏力
+4. 视物模糊
+需要注意的是，部分患者可能无明显症状。""",
+                "type": "symptoms"
+            },
+            {
+                "title": "高血压治疗方案",
+                "content": """治疗原则：
+1. 药物治疗：钙通道阻滞剂、ACEI/ARB类药物
+2. 生活方式干预：限盐、运动、戒烟限酒
+3. 定期监测血压
+4. 防治并发症""",
+                "type": "treatment"
+            }
+        ]
+        self.documents.extend(default_docs)

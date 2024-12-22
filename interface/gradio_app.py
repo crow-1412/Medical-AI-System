@@ -7,6 +7,7 @@ from knowledge_base.knowledge_manager import KnowledgeManager
 from config.config import Config
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 import bitsandbytes as bnb
+import socket
 
 class BaseAgent:
     def __init__(self, model_path: str):
@@ -30,7 +31,7 @@ class BaseAgent:
             load_config = {
                 "device_map": "auto",          # 自动设备映射
                 "max_memory": {0: "15GB"},     # 限制GPU内存使用
-                "offload_folder": "/root/autodl-tmp/offload",  # 模型权重卸载目录
+                "offload_folder": "/root/autodl-tmp/offload",  # 模型权重卸���目录
                 "quantization_config": quantization_config,    # 8-bit 量化
                 "load_in_8bit": True,          # 启用 8-bit 量化
                 "trust_remote_code": True,
@@ -78,26 +79,42 @@ class BaseAgent:
             raise e
 
 class MedicalReportGenerator:
-    def __init__(self):
-        self.knowledge_mgr = None
-        self.workflow_mgr = None
-        self._is_initialized = False
-        
+    _instance = None
+    _lock = asyncio.Lock()
+    
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super(MedicalReportGenerator, cls).__new__(cls)
+            cls._instance.knowledge_mgr = None
+            cls._instance.workflow_mgr = None
+            cls._instance._is_initialized = False
+        return cls._instance
+    
     async def initialize(self):
-        if not self._is_initialized:
-            # 设置 CUDA 内存分配器
-            if torch.cuda.is_available():
-                clean_gpu_memory()
-                # 降低内存使用比例
-                torch.cuda.set_per_process_memory_fraction(0.6)  # 使用60%的可用GPU内存
-                
-            self.knowledge_mgr = KnowledgeManager(config=Config)
-            await self.knowledge_mgr.initialize()
-            
-            self.workflow_mgr = WorkflowManager(Config)
-            self.workflow_mgr.initialize_agents(self.knowledge_mgr)
-            self._is_initialized = True
-            
+        async with self._lock:  # 使用锁来确保并发安全
+            if not self._is_initialized:
+                try:
+                    if torch.cuda.is_available():
+                        clean_gpu_memory()
+                        torch.cuda.set_per_process_memory_fraction(0.6)
+                    
+                    # 初始化知识库管理器
+                    self.knowledge_mgr = KnowledgeManager(config=Config)
+                    print("开始初始化知识库...")
+                    await self.knowledge_mgr.initialize()
+                    print("知识库初始化完成")
+                    
+                    # 初始化工作流管理器
+                    self.workflow_mgr = WorkflowManager(Config)
+                    self.workflow_mgr.initialize_agents(self.knowledge_mgr)
+                    
+                    self._is_initialized = True
+                    print("系统初始化完成")
+                    
+                except Exception as e:
+                    print(f"初始化失败: {str(e)}")
+                    raise
+
     async def generate_report(self, patient_info: str, report_type: str = "初步诊断报告") -> str:
         """异步版本的报告生成函数"""
         try:
@@ -124,8 +141,18 @@ class MedicalReportGenerator:
             print(f"生成报告时出错: {str(e)}")
             return f"生成报告失败: {str(e)}"
 
+# 创建全局单例实例
+_generator = None
+
+def get_generator():
+    global _generator
+    if _generator is None:
+        _generator = MedicalReportGenerator()
+    return _generator
+
 def create_gradio_interface():
-    generator = MedicalReportGenerator()
+    # 使用全局单例实例
+    generator = get_generator()
     
     # 设置界面主题和样式
     theme = gr.themes.Soft(
@@ -156,7 +183,7 @@ def create_gradio_interface():
                 output = gr.Textbox(
                     label="生成的报告",
                     lines=10,
-                    show_copy_button=True  # 添加复制按钮
+                    show_copy_button=True
                 )
         
         # 添加示例
@@ -168,14 +195,15 @@ def create_gradio_interface():
             inputs=[patient_info, report_type]
         )
         
-        # 绑定生成函数
+        # 绑定生成函数并设置队列
         submit_btn.click(
             fn=lambda x, y: asyncio.run(generator.generate_report(x, y)),
             inputs=[patient_info, report_type],
             outputs=output,
-            api_name="generate"
+            api_name="generate",
+            queue=True
         )
-        
+    
     return demo
 
 def clean_gpu_memory():
@@ -193,6 +221,7 @@ def clean_gpu_memory():
 if __name__ == "__main__":
     # 设置 CUDA 环境变量
     import os
+    import socket
     os.environ['PYTORCH_CUDA_ALLOC_CONF'] = 'expandable_segments:True,max_split_size_mb:256'
     os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
     os.environ['CUDA_VISIBLE_DEVICES'] = '0,1'
@@ -203,24 +232,38 @@ if __name__ == "__main__":
     # 清理环境
     clean_gpu_memory()
     
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
+    # 获取服务器IP地址
+    hostname = socket.gethostname()
+    ip_address = socket.gethostbyname(hostname)
+    print(f"\n服务器信息:")
+    print(f"主机名: {hostname}")
+    print(f"容器内部IP: {ip_address}")
+    print(f"注意: 这是Docker容器的内部地址，无法直接访问")
+    print(f"请在AutoDL控制台中:")
+    print(f"1. 找到'开放端口'或'SSH&Jupyter'选项卡")
+    print(f"2. 将端口 7860 映射到公网")
+    print(f"3. 使用AutoDL提供的访问地址访问\n")
     
-    generator = MedicalReportGenerator()
+    # 获取全局生成器实例并初始化
+    generator = get_generator()
+    loop = asyncio.get_event_loop()
     loop.run_until_complete(generator.initialize())
     
+    # 创建并启动 Gradio 界面
     demo = create_gradio_interface()
     
-    # 修改启动参数
+    print("\n正在启动服务器...")
+    print("如果长时间未显示'Running'信息，请检查:")
+    print("1. 端口 7860 是否已被占用")
+    print("2. 是否有足够的系统资源")
+    print("3. 在AutoDL控制台中端口是否正确映射\n")
+    
+    # 启动 Gradio 服务器
     demo.launch(
-        server_name="0.0.0.0",
-        server_port=7860,
-        share=False,  # 禁用分享链接
-        show_error=True,
-        auth=None,  # 移除认证
-        favicon_path=None,  # 移除图标
-        ssl_keyfile=None,  # 禁用SSL
-        ssl_certfile=None,
-        ssl_keyfile_password=None,
-        quiet=False  # 显示更多日志
+        server_name="0.0.0.0",  # 允许所有IP访问
+        server_port=7860,       # 使用7860端口
+        share=False,            # 禁用不稳定的分享功能
+        auth=None,              # 不需要认证
+        show_error=True,        # 显示详细错误信息
+        quiet=False             # 显示完整日志
     )
