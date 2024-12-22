@@ -38,31 +38,49 @@ class MedicalSystemProcessor:
         train_data = []
         raw_data_path = self.config.STORAGE_PATHS["raw_data"]
         
-        for file in raw_data_path.glob("*.jsonl"):
-            data = await self.knowledge_mgr.process_medical_data(file)
-            if data:
-                train_data.extend(data)
+        try:
+            for file in raw_data_path.glob("*.jsonl"):
+                # 处理每个文件
+                processed_data = await self.knowledge_mgr.process_medical_data(file)
+                if processed_data:
+                    # 转换为训练格式
+                    for item in processed_data:
+                        train_example = {
+                            "text": f"标题：{item['title']}\n内容：{item['content']}",
+                            "source": item['source'],
+                            "type": item['type']
+                        }
+                        train_data.append(train_example)
                 
-        logger.info(f"准备了 {len(train_data)} 条训练数据")
-        return train_data
+            logger.info(f"准备了 {len(train_data)} 条训练数据")
+            return train_data
+            
+        except Exception as e:
+            logger.error(f"准备训练数据失败: {str(e)}")
+            raise
         
     async def train_model(self):
         """训练模型"""
         logger.info("开始模型训练...")
         
-        # 1. 准备训练数据
-        train_data = await self.prepare_training_data()
-        
-        # 2. 初始化LoRA训练器
-        trainer = LoRATrainer(self.config)
-        
-        # 3. 开始训练
-        trainer.train(
-            train_dataset=train_data,
-            output_dir=self.config.STORAGE_ROOT / "lora_weights"
-        )
-        
-        logger.info("模型训练完成")
+        try:
+            # 1. 准备训练数据
+            train_data = await self.prepare_training_data()
+            
+            # 2. 初始化LoRA训练器
+            trainer = LoRATrainer(self.config)
+            
+            # 3. 开始训练
+            trainer.train(
+                train_dataset=train_data,
+                output_dir=str(self.config.STORAGE_ROOT / "lora_weights")  # 转换为字符串
+            )
+            
+            logger.info("模型训练完成")
+            
+        except Exception as e:
+            logger.error(f"训练失败: {str(e)}")
+            raise
         
     async def run(self):
         """运行完整流程"""

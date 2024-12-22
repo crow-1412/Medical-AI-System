@@ -21,29 +21,51 @@ class KnowledgeManager:
                     "2级": "160-179/100-109mmHg",
                     "3级": "≥180/≥110mmHg"
                 },
-                "risk_factors": [
-                    "年龄>55岁",
-                    "吸烟",
-                    "血脂异常",
-                    "肥胖",
-                    "家族史"
-                ],
-                "complications": [
-                    "心脏病",
-                    "脑卒中",
-                    "肾病"
-                ]
+                "symptoms": {
+                    "primary": ["头痛", "头晕", "眩晕"],
+                    "secondary": ["心悸", "胸闷", "呼吸急促", "乏力"]
+                },
+                "risk_factors": ["年龄>45岁", "家族史阳性"],
+                "treatments": {
+                    "medications": [
+                        "钙通道阻滞剂",
+                        "血管紧张素转换酶抑制剂(ACEI)",
+                        "血管紧张素受体拮抗剂(ARB)"
+                    ],
+                    "lifestyle": [
+                        "限制盐摄入量（<6g/日）",
+                        "规律运动（每周3-5次，每次30分钟）",
+                        "戒烟限酒",
+                        "保持健康体重"
+                    ],
+                    "follow_up": "每2周随访一次，直至血压稳定",
+                    "precautions": [
+                        "定期监测血压",
+                        "避免剧烈运动",
+                        "保持情绪稳定",
+                        "遵医嘱服药"
+                    ]
+                }
             }
         }
         
     async def initialize(self):
         """初始化知识库"""
         try:
+            # 加载文档
             self._load_documents()
-            if self.documents:  # 只在有文档时构建索引
+            
+            # 如果没有文档，从爬取的数据导入
+            if not self.documents:
+                await self.import_crawled_data()
+                
+            # 构建索引
+            if self.documents:
                 self._build_index()
+                logger.info(f"知识库初始化完成，包含 {len(self.documents)} 个文档")
             else:
-                logger.warning("没有找到文档数据，跳过索引构建")
+                logger.warning("没有找到任何文档数据")
+                
         except Exception as e:
             logger.error(f"初始化知识库失败: {str(e)}")
             raise
@@ -70,7 +92,7 @@ class KnowledgeManager:
             texts = [doc["content"] for doc in self.documents]
             embeddings = self.encoder.encode(texts)
             
-            # 获��向量维度
+            # 获向量维度
             vector_dim = embeddings.shape[1]
             logger.info(f"向量维度: {vector_dim}")
             
@@ -138,29 +160,98 @@ class KnowledgeManager:
                 
     def _process_medical_data(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """处理医疗数据"""
-        # 实现数据处理逻辑
-        return processed_data
+        try:
+            processed_data = {
+                "title": data.get("title", ""),
+                "content": data.get("content", "") or data.get("abstract", ""),
+                "source": data.get("source", ""),
+                "url": data.get("url", ""),
+                "type": data.get("type", "article"),
+                "keyword": data.get("keyword", ""),
+                "timestamp": data.get("crawl_time", "")
+            }
+            return processed_data
+        except Exception as e:
+            logger.error(f"处理数据失败: {str(e)}")
+            return None
+
+    async def process_medical_data(self, file_path: Path) -> List[Dict[str, Any]]:
+        """处理医疗数据文件"""
+        processed_data = []
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                for line in f:
+                    data = json.loads(line)
+                    processed = self._process_medical_data(data)
+                    if processed:
+                        processed_data.append(processed)
+            return processed_data
+        except Exception as e:
+            logger.error(f"处理文件失败 {file_path}: {str(e)}")
+            return []
         
-    async def analyze_symptoms(self, symptoms: list) -> dict:
-        """分析症状关联性"""
-        analysis = {
-            "primary_symptoms": [],
-            "secondary_symptoms": [],
-            "risk_level": "",
-            "related_diseases": []
+    async def analyze_symptoms(self, symptoms: list, bp: str) -> dict:
+        """分析症状和血压"""
+        # 解析血压值
+        systolic, diastolic = map(int, bp.split('/'))
+        
+        # 判断高血压等级
+        if 160 <= systolic < 180 or 100 <= diastolic < 110:
+            risk_level = "2级高血压"
+        elif systolic >= 180 or diastolic >= 110:
+            risk_level = "3级高血压"
+        elif 140 <= systolic < 160 or 90 <= diastolic < 100:
+            risk_level = "1级高血压"
+        else:
+            risk_level = "正常"
+
+        return {
+            "primary_symptoms": [s for s in symptoms if s in self.medical_rules["高血压"]["symptoms"]["primary"]],
+            "secondary_symptoms": [s for s in symptoms if s in self.medical_rules["高血压"]["symptoms"]["secondary"]],
+            "risk_level": risk_level,
+            "related_diseases": ["高血压", "心血管疾病"]
         }
-        
-        # 实现症状分析逻辑
-        return analysis
         
     async def generate_treatment_plan(self, diagnosis: str, symptoms: list) -> dict:
         """生成治疗方案"""
-        plan = {
-            "medications": [],
-            "lifestyle_changes": [],
-            "follow_up": "",
-            "precautions": []
-        }
-        
-        # 实现治疗方案生成逻辑
-        return plan
+        try:
+            # 获取高血压相关治疗方案
+            hypertension_rules = self.medical_rules["高血压"]["treatments"]
+            
+            return {
+                "medications": hypertension_rules["medications"],
+                "lifestyle_changes": hypertension_rules["lifestyle"],
+                "follow_up": hypertension_rules["follow_up"],
+                "precautions": hypertension_rules["precautions"]
+            }
+        except Exception as e:
+            logger.error(f"生成治疗方案失败: {str(e)}")
+            return {
+                "medications": [],
+                "lifestyle_changes": [],
+                "follow_up": "",
+                "precautions": []
+            }
+
+    def _update_index(self):
+        """更新向量索引"""
+        try:
+            # 重新构建索引
+            texts = [doc["content"] for doc in self.documents]
+            embeddings = self.encoder.encode(texts)
+            
+            # 获取向量维度
+            vector_dim = embeddings.shape[1]
+            
+            # 创建新索引
+            self.index = faiss.IndexFlatL2(vector_dim)
+            
+            # 添加向量到索引
+            embeddings_array = np.array(embeddings).astype('float32')
+            self.index.add(embeddings_array)
+            
+            logger.info(f"索引更新完成，当前包含 {len(self.documents)} 个文档")
+            
+        except Exception as e:
+            logger.error(f"更新索引失败: {str(e)}")
+            raise

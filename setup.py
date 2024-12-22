@@ -9,8 +9,12 @@ setup(
         "transformers",
         "gradio",
         "sentence-transformers",
-        "faiss-cpu",  # 或 faiss-gpu
+        "faiss-cpu",
         "numpy",
-        "pandas"
+        "pandas",
+        "chromadb",
+        "langchain-community>=0.0.10",
+        "langchain-core>=0.1.0",
+        "langchain>=0.1.0"
     ]
 ) 

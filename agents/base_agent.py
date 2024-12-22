@@ -62,8 +62,8 @@ class BaseAgent(ABC):
                     offload_folder="/root/autodl-tmp/offload",
                     cache_dir=self.cache_dir,
                     local_files_only=True,
-                    use_safetensors=True,
-                    low_cpu_mem_usage=True
+                    low_cpu_mem_usage=True,
+                    use_auth_token=False
                 )
                 
                 # 确保有 pad_token
@@ -83,6 +83,8 @@ class BaseAgent(ABC):
                     
             except Exception as e:
                 print(f"模型加载失败: {str(e)}")
+                import traceback
+                print(f"错误堆栈: {traceback.format_exc()}")
                 self.clean_gpu_memory()
                 raise e
     

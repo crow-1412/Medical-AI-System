@@ -6,6 +6,7 @@ from typing import Dict
 import os
 from dotenv import load_dotenv
 import torch
+from peft import TaskType
 
 load_dotenv()
 
@@ -24,7 +25,7 @@ class Config:
     VECTOR_DB_PATH = Path("/root/autodl-tmp/medical_ai_system/vector_store")
     
     # 模型配置
-    BASE_MODEL_NAME = "baichuan-inc/Baichuan2-7B-Chat"  # 需要确保这个模型可以访问
+    BASE_MODEL_NAME = "/root/autodl-tmp/model_cache/models--baichuan-inc--Baichuan2-7B-Chat/snapshots/ea66ced17780ca3db39bc9f8aa601d8463db3da5"
     MODEL_CONFIG = {
         "model_name": BASE_MODEL_NAME,
         "max_memory": {
@@ -49,16 +50,29 @@ class Config:
         "lora_alpha": 32,
         "lora_dropout": 0.1,
         "bias": "none",
-        "task_type": "CAUSAL_LM"
+        "task_type": TaskType.CAUSAL_LM,
+        "target_modules": [
+            "W_pack",
+            "o_proj",
+            "gate_proj",
+            "up_proj",
+            "down_proj"
+        ]
     }
     
     # 训练配置
     TRAINING_CONFIG = {
-        "batch_size": 4,
-        "learning_rate": 2e-4,
+        "batch_size": 2,  # 减小批次大小以适应显存
+        "learning_rate": 1e-4,  # 调整学习率
         "num_epochs": 3,
         "weight_decay": 0.01,
-        "warmup_steps": 100
+        "warmup_steps": 100,
+        "max_length": 512,
+        "gradient_accumulation_steps": 8,  # 增加梯度累积步数
+        "fp16": True,  # 使用混合精度训练
+        "logging_steps": 10,
+        "save_steps": 100,
+        "max_grad_norm": 0.5  # 添加梯度裁剪
     }
     
     # 知识库配置
