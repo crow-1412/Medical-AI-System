@@ -1,1 +1,9 @@
 .env
+__pycache__/
+*.pyc
+.DS_Store
+.idea/
+.vscode/
+*.log
+model_cache/
+vector_store/
