@@ -20,8 +20,8 @@ class WorkflowManager:
             print(f"输入数据: {input_data}")
             
             if workflow_name == "generate_report":
-                # 同步执行报告生成
-                result = self.agents["report_generation"].process(input_data)
+                # 修改这里：添加 await
+                result = await self.agents["report_generation"].process(input_data)
                 return result
             else:
                 raise ValueError(f"未知的工作流: {workflow_name}")

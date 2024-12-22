@@ -98,34 +98,19 @@ class MedicalReportGenerator:
             self.workflow_mgr.initialize_agents(self.knowledge_mgr)
             self._is_initialized = True
             
-    def generate_report(self, patient_info: str, report_type: str = "初步诊断报告") -> str:
-        """同步版本的报告生成函数"""
+    async def generate_report(self, patient_info: str, report_type: str = "初步诊断报告") -> str:
+        """异步版本的报告生成函数"""
         try:
             if not self._is_initialized:
-                try:
-                    loop = asyncio.get_event_loop()
-                except RuntimeError:
-                    loop = asyncio.new_event_loop()
-                    asyncio.set_event_loop(loop)
-                
-                loop.run_until_complete(self.initialize())
+                await self.initialize()
             
-            clean_gpu_memory()
-            
-            loop = asyncio.get_event_loop()
-            
-            async def _generate():
-                return await self.workflow_mgr.execute_workflow(
-                    "generate_report",
-                    {
-                        "patient_info": patient_info,
-                        "report_type": report_type
-                    }
-                )
-            
-            result = loop.run_until_complete(_generate())
-            
-            clean_gpu_memory()
+            result = await self.workflow_mgr.execute_workflow(
+                "generate_report",
+                {
+                    "patient_info": patient_info,
+                    "report_type": report_type
+                }
+            )
             
             if isinstance(result, dict):
                 if "data" in result and isinstance(result["data"], dict):
@@ -137,10 +122,7 @@ class MedicalReportGenerator:
             
         except Exception as e:
             print(f"生成报告时出错: {str(e)}")
-            if "out of memory" in str(e):
-                clean_gpu_memory()
-                return "GPU 内存不足，请稍后重试或联系管理员调整置"
-            return f"生成报告时出错: {str(e)}"
+            return f"生成报告失败: {str(e)}"
 
 def create_gradio_interface():
     generator = MedicalReportGenerator()
@@ -188,10 +170,10 @@ def create_gradio_interface():
         
         # 绑定生成函数
         submit_btn.click(
-            fn=generator.generate_report,
+            fn=lambda x, y: asyncio.run(generator.generate_report(x, y)),
             inputs=[patient_info, report_type],
             outputs=output,
-            api_name="generate"  # 添加API名称
+            api_name="generate"
         )
         
     return demo
