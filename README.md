@@ -10,11 +10,11 @@ python scripts/init_knowledge_base.py
 ### 访问方式
 #### 本地访问
 打开浏览器访问：http://localhost:7860
-# 运行主程序
+### 运行主程序
 python interface/gradio_app.py
-# 克隆仓库
+### 克隆仓库
 git clone https://github.com/crow-1412/Medical-AI-System.git
-# 提交更新
+### 提交更新
 git add .
 git commit -m "更新说明"
 git push origin main
