@@ -1,4 +1,4 @@
-###安装所需依赖
+### 安装所需依赖
 pip install gradio transformers torch bitsandbytes accelerate sentence-transformers faiss-cpu langchain-community beautifulsoup4 python-dotenv sentencepiece
 ### 配置 Git
 git config --global user.name "您的用户名"
