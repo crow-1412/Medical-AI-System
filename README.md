@@ -1,140 +1,113 @@
-# 医疗报告生成系统
+# 医疗AI助手
 
-基于多智能体架构的医疗 AI 系统，能够根据患者信息自动生成规范的医疗报告。
+一个基于人工智能的医疗辅助系统，能够根据患者症状生成初步诊断报告、检查建议和治疗方案。
 
-## 系统特点
+## 功能特点
 
-- 多智能体协作架构
-- 知识库自动构建和更新
-- 支持多种报告类型生成
-- 自动症状分析和诊断建议
-- 智能治疗方案推荐
-- 基于 LoRA 的模型微调
+### 1. 智能诊断报告生成
+- 支持多种报告类型：
+  - 初步诊断报告
+  - 详细检查建议
+  - 治疗方案建议
+- 基于症状的智能匹配
+- 体温数值的精确分析
+- 多维度相关性评分
+
+### 2. 知识库系统
+- 涵盖常见疾病信息
+- 详细的症状描述
+- 标准化治疗方案
+- 医疗指南参考
+
+### 3. 用户友好界面
+- 简洁的Web界面
+- 实时响应
+- 清晰的结果展示
 
 ## 系统要求
 
 - Python 3.8+
-- CUDA 支持的 GPU（推荐 16GB+ 显存）
-- 至少 32GB 系统内存
+- CUDA支持的GPU（推荐）
+- 8GB+ RAM
+- 50GB+ 磁盘空间
 
-## 安装步骤
+## 安装说明
 
-1. 克隆仓库
+1. 克隆仓库：
 ```bash
-git clone https://github.com/crow-1412/Medical-AI-System.git
-cd Medical-AI-System
+git clone [仓库地址]
+cd medical_ai
 ```
 
-2. 安装依赖
+2. 创建虚拟环境：
+```bash
+python -m venv venv
+source venv/bin/activate  # Linux/Mac
+venv\Scripts\activate     # Windows
+```
+
+3. 安装依赖：
 ```bash
 pip install -r requirements.txt
 ```
 
-或手动安装所需包：
+4. 配置环境变量：
 ```bash
-pip install gradio transformers torch bitsandbytes accelerate sentence-transformers faiss-cpu langchain-community beautifulsoup4 python-dotenv sentencepiece
+cp .env.example .env
+# 编辑.env文件，设置必要的配置项
 ```
 
-3. 配置环境
-```bash
-# 配置 Git
-git config --global user.name "您的用户名"
-git config --global user.email "您的邮箱"
+## 使用指南
 
-# 设置远程仓库（替换 YOUR_TOKEN 为您的 GitHub token）
-git remote set-url origin https://YOUR_TOKEN@github.com/crow-1412/Medical-AI-System.git
+1. 启动系统：
+```bash
+python run.py
 ```
 
-## 使用说明
-
-1. 初始化知识库
-```bash
-python scripts/process_and_train.py
-```
-
-2. 启动 Web 界面
-```bash
-python interface/gradio_app.py
-```
-
-3. 访问系统
+2. 访问Web界面：
 - 本地访问：http://localhost:7860
 - 远程访问：
-  1. 在 AutoDL 控制台中找到"开放端口"
-  2. 将端口 7860 映射到公网
-  3. 使用 AutoDL 提供的访问地址
+  - 在AutoDL控制台中找到"开放端口"
+  - 将端口7860映射到公网
+  - 使用AutoDL提供的访问地址
 
-## 功能特性
+3. 输入患者信息：
+- 格式示例：`患者，性别，年龄，症状描述，体温等`
+- 例如：`患者，女，35岁，咳嗽，发热三天，体温38.5°C`
 
-### 1. 报告类型
-- 初步诊断报告
-- 住院记录
-- 手术记录
+4. 选择报告类型：
+- 初步诊断报告：生成基础诊断信息
+- 详细检查建议：提供进一步检查建议
+- 治疗方案：提供治疗方案建议
 
-### 2. 智能分析
-- 症状识别和分析
-- 血压等级判断
-- 相关疾病关联
-- 治疗方案推荐
+## 知识库内容
 
-### 3. 知识库功能
-- 自动文档处理
-- 向量化存储
-- 相似度检索
-- 实时知识更新
+### 已收录疾病
+- 上呼吸道感染
+- 流行性感冒
+- 支气管炎
+- 肺炎
 
-### 4. 模型训练
-- LoRA 微调支持
-- 8-bit 量化优化
-- 自动梯度检查点
-- 多 GPU 支持
+### 症状系统
+- 呼吸系统症状
+- 心血管系统症状
+- 一般症状
 
-## 开发指南
-
-### 代码结构
-```
-Medical-AI-System/
-├── agents/                 # 智能代理模块
-├── config/                 # 配置文件
-├── crawlers/              # 数据爬取模块
-├── interface/             # Web 界面
-├── knowledge_base/        # 知识库管理
-├── training/              # 模型训练
-└── workflows/             # 工作流管理
-```
-
-### 更新代码
-```bash
-git add .
-git commit -m "更新说明"
-git push origin main
-```
-
-## 系统架构
-
-![系统架构图](https://github.com/user-attachments/assets/ae1232a6-993a-4970-8bab-6ba3fdb7b02d)
-
-## 工作流程
-
-![工作流程图](https://github.com/user-attachments/assets/b223e954-ca69-4088-b1a7-25bce909350f)
+### 治疗方案
+- 药物治疗建议
+- 生活方式指导
+- 预防措施
 
 ## 注意事项
 
-1. 内存管理
-   - 使用 `clean_gpu_memory()` 定期清理 GPU 内存
-   - 设置合适的批处理大小
-   - 启用梯度检查点节省显存
+1. 本系统仅供辅助诊断使用，不能替代专业医生的诊断和建议
+2. 在紧急情况下，请立即就医
+3. 系统生成的报告仅供参考，具体治疗方案请遵医嘱
 
-2. 并发处理
-   - 使用异步操作处理请求
-   - 实现单例模式避免重复初始化
-   - 使用锁机制确保并发安全
+## 技术支持
 
-3. 错误处理
-   - 完善的异常捕获和日志记录
-   - 优雅的错误恢复机制
-   - 用户友好的错误提示
+如有问题或建议，请提交Issue或联系技术支持团队。
 
 ## 许可证
 
-[MIT License](LICENSE)
+本项目采用 MIT 许可证

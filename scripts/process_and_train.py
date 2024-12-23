@@ -1,118 +1,108 @@
-import asyncio
+import os
+import json
 import logging
+import asyncio
 from pathlib import Path
+
 from config.config import Config
 from knowledge_base.knowledge_manager import KnowledgeManager
-from knowledge_base.vector_store import VectorStoreManager
 from training.lora_trainer import LoRATrainer
-from agents.report_generation_agent import ReportGenerationAgent
-
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
 
 class MedicalSystemProcessor:
+    """医疗系统处理器"""
+    
     def __init__(self):
-        self.config = Config
+        """初始化"""
+        self.config = Config()
+        self.config.init_dirs()
+        
+        self._setup_logging()
         self.knowledge_mgr = KnowledgeManager(self.config)
-        self.vector_store = VectorStoreManager(self.config)
+        self.trainer = LoRATrainer(self.config)
         
+    def _setup_logging(self):
+        """设置日志"""
+        log_dir = Path(self.config.STORAGE_PATHS["logs"])
+        log_dir.mkdir(parents=True, exist_ok=True)
+        
+        logging.basicConfig(
+            level=logging.INFO,
+            format=self.config.LOG_FORMAT,
+            handlers=[
+                logging.StreamHandler()
+            ]
+        )
+        
+        self.logger = logging.getLogger(__name__)
+    
     async def process_knowledge_base(self):
-        """处理知识库数据"""
-        logger.info("开始处理知识库数据...")
-        
-        # 1. 初始化知识管理器
-        await self.knowledge_mgr.initialize()
-        
-        # 2. 导入爬取的数据
-        await self.knowledge_mgr.import_crawled_data()
-        
-        # 3. 构建向量索引
-        self.vector_store.initialize_store()
-        
-        logger.info("知识库处理完成")
-        
+        """处理知识库"""
+        try:
+            self.logger.info("开始处理知识库数据...")
+            await self.knowledge_mgr.import_crawled_data()
+            self.logger.info("知识库处理完成")
+            
+        except Exception as e:
+            self.logger.error(f"处理知识库时出错: {str(e)}")
+            raise
+    
     async def prepare_training_data(self):
         """准备训练数据"""
-        logger.info("开始准备训练数据...")
-        
-        train_data = []
-        raw_data_path = self.config.STORAGE_PATHS["raw_data"]
-        
         try:
-            for file in raw_data_path.glob("*.jsonl"):
-                # 处理每个文件
-                processed_data = await self.knowledge_mgr.process_medical_data(file)
-                if processed_data:
-                    # 转换为训练格式
-                    for item in processed_data:
-                        train_example = {
-                            "text": f"标题：{item['title']}\n内容：{item['content']}",
-                            "source": item['source'],
-                            "type": item['type']
-                        }
-                        train_data.append(train_example)
-                
-            logger.info(f"准备了 {len(train_data)} 条训练数据")
-            return train_data
+            self.logger.info("开始准备训练数据...")
+            
+            # 从知识库中获取数据
+            data = await self.knowledge_mgr.get_all_documents()
+            
+            # 保存为训练数据文件
+            train_data_path = Path(self.config.STORAGE_PATHS["processed_data"]) / "train_data.jsonl"
+            train_data_path.parent.mkdir(parents=True, exist_ok=True)
+            
+            with open(train_data_path, 'w', encoding='utf-8') as f:
+                for item in data:
+                    json.dump(item, f, ensure_ascii=False)
+                    f.write('\n')
+            
+            self.logger.info(f"准备了 {len(data)} 条训练数据")
+            return str(train_data_path)
             
         except Exception as e:
-            logger.error(f"准备训练数据失败: {str(e)}")
+            self.logger.error(f"准备训练数据时出错: {str(e)}")
             raise
-        
+    
     async def train_model(self):
         """训练模型"""
-        logger.info("开始模型训练...")
-        
         try:
-            # 1. 准备训练数据
-            train_data = await self.prepare_training_data()
+            self.logger.info("开始模型训练...")
             
-            # 2. 初始化LoRA训练器
-            trainer = LoRATrainer(self.config)
+            # 准备训练数据
+            train_data_path = await self.prepare_training_data()
             
-            # 3. 开始训练
-            trainer.train(
-                train_dataset=train_data,
-                output_dir=str(self.config.STORAGE_ROOT / "lora_weights")  # 转换为字符串
-            )
+            # 准备模型
+            self.trainer.prepare_model()
             
-            logger.info("模型训练完成")
+            # 开始训练
+            self.trainer.train(train_data_path)
             
         except Exception as e:
-            logger.error(f"训练失败: {str(e)}")
+            self.logger.error(f"训练失败: {str(e)}")
             raise
-        
+    
     async def run(self):
-        """运行完整流程"""
+        """运行处理流程"""
         try:
-            # 1. 处理知识库
+            # 处理知识库
             await self.process_knowledge_base()
             
-            # 2. 训练模型
+            # 训练模型
             await self.train_model()
             
-            # 3. 测试生成效果
-            await self.test_generation()
-            
         except Exception as e:
-            logger.error(f"处理过程出错: {str(e)}", exc_info=True)
-            
-    async def test_generation(self):
-        """测试报告生成效果"""
-        test_cases = [
-            {
-                "patient_info": "患者，男，45岁，血压160/100mmHg，头痛、眩晕、乏力、心悸、胸闷、呼吸急促等症状。",
-                "report_type": "初步诊断报告"
-            }
-        ]
-        
-        agent = ReportGenerationAgent(self.config)
-        
-        for case in test_cases:
-            result = await agent.process(case)
-            logger.info(f"\n生成报告:\n{result['data']['report']}")
+            self.logger.error(f"处理过程出错: {str(e)}")
+            raise
 
 async def main():
+    """主函数"""
     processor = MedicalSystemProcessor()
     await processor.run()
 

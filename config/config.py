@@ -1,120 +1,133 @@
-import sys
-sys.setrecursionlimit(3000)  # 设置更大的递归限制
+"""配置文件"""
 
-from pathlib import Path
-from typing import Dict
 import os
-from dotenv import load_dotenv
+from pathlib import Path
 import torch
-from peft import TaskType
-
-load_dotenv()
 
 class Config:
-    # 基础配置
-    BASE_DIR = Path(__file__).parent.parent
-    CACHE_DIR = Path("/root/autodl-tmp/model_cache")
+    """配置类"""
     
-    # 设置环境变量
-    os.environ["TRANSFORMERS_CACHE"] = str(CACHE_DIR)
+    # 基础模型名称
+    BASE_MODEL_NAME = "THUDM/chatglm3-6b"
     
-    # API密钥
-    OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-    
-    # 向量数据库配置
-    VECTOR_DB_PATH = Path("/root/autodl-tmp/medical_ai_system/vector_store")
-    
-    # 模型配置
-    BASE_MODEL_NAME = "/root/autodl-tmp/model_cache/models--baichuan-inc--Baichuan2-7B-Chat/snapshots/ea66ced17780ca3db39bc9f8aa601d8463db3da5"
-    MODEL_CONFIG = {
-        "model_name": BASE_MODEL_NAME,
-        "max_memory": {
-            0: "20GB",  # GPU 0 使用 20GB
-            1: "20GB",  # GPU 1 使用 20GB
-            "cpu": "30GB"  # CPU 内存
-        },
-        "device_map": "auto",  # 自动在多GPU间分配模型层
-        "offload_folder": "/root/autodl-tmp/offload",
-        "torch_dtype": torch.float16,
-        "low_cpu_mem_usage": True,
-        "load_in_8bit": True,
-        "use_cache": True,
-        "max_length": 512,
-        "chunk_size": 256,
-        "trust_remote_code": True
+    # 存储路径配置
+    STORAGE_PATHS = {
+        "raw_data": Path("data/raw"),  # 原始数据目录
+        "processed_data": Path("data/processed"),  # 处理后的数据目录
+        "model_cache": Path("models"),  # 模型缓存目录
+        "output": Path("output"),  # 输出目录
+        "logs": Path("logs")  # 日志目录
     }
     
-    # LoRA配置
+    # 模型配置
+    MODEL_CONFIG = {
+        "trust_remote_code": True,
+        "torch_dtype": torch.bfloat16,
+        "low_cpu_mem_usage": True,
+        "device_map": "auto"
+    }
+    
+    # LoRA 配置
     LORA_CONFIG = {
         "r": 8,
         "lora_alpha": 32,
         "lora_dropout": 0.1,
-        "bias": "none",
-        "task_type": TaskType.CAUSAL_LM,
-        "target_modules": [
-            "W_pack",
-            "o_proj",
-            "gate_proj",
-            "up_proj",
-            "down_proj"
-        ]
+        "target_modules": ["query_key_value"],
+        "bias": "none"
     }
     
     # 训练配置
     TRAINING_CONFIG = {
-        "batch_size": 2,  # 减小批次大小以适应显存
-        "learning_rate": 1e-4,  # 调整学习率
-        "num_epochs": 3,
-        "weight_decay": 0.01,
-        "warmup_steps": 100,
-        "max_length": 512,
-        "gradient_accumulation_steps": 8,  # 增加梯度累积步数
-        "fp16": True,  # 使用混合精度训练
+        "output_dir": str(Path("models/lora_checkpoints")),
+        "num_train_epochs": 3,
+        "per_device_train_batch_size": 1,
+        "learning_rate": 2e-4,
         "logging_steps": 10,
         "save_steps": 100,
-        "max_grad_norm": 0.5  # 添加梯度裁剪
+        "save_total_limit": 3,
+        "gradient_accumulation_steps": 4,
+        "warmup_steps": 100,
+        "max_grad_norm": 0.3
     }
     
     # 知识库配置
     KNOWLEDGE_BASE_CONFIG = {
-        "chunk_size": 1000,
-        "chunk_overlap": 200,
-        "top_k": 5,
-        "similarity_threshold": 0.7,
-        "storage_path": BASE_DIR / "storage",
-        "vector_dim": 768,  # 向量维度
-        "max_tokens": 2048  # 每个文档的最大token数
+        "embedding_model": "text2vec-base",  # 向量化模型
+        "embedding_dimension": 100,  # 向量维度
+        "distance_metric": "cosine",  # 距离度量方式
+        "top_k": 5  # 检索时返回的最相似条目数
     }
     
     # 爬虫配置
     CRAWLER_CONFIG = {
-        "nih_base_url": "https://www.nih.gov",
-        "pubmed_base_url": "https://pubmed.ncbi.nlm.nih.gov",
-        "max_retries": 3,
-        "timeout": 30,
-        "delay": 2.0,
+        "delay": 5,  # 请求延迟（秒）
+        "timeout": 60,  # 请求超时（秒）
+        "max_retries": 5,  # 最大重试次数
         "headers": {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
-            "Accept-Language": "en-US,en;q=0.9",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+            "Accept-Language": "en-US,en;q=0.9,zh-CN;q=0.8,zh;q=0.7",
             "Accept-Encoding": "gzip, deflate, br",
             "Connection": "keep-alive",
             "Cache-Control": "max-age=0",
             "Upgrade-Insecure-Requests": "1",
+            "Referer": "https://www.google.com/",
+            "Sec-Ch-Ua": '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
+            "Sec-Ch-Ua-Mobile": "?0",
+            "Sec-Ch-Ua-Platform": '"Windows"',
             "Sec-Fetch-Dest": "document",
             "Sec-Fetch-Mode": "navigate",
-            "Sec-Fetch-Site": "none",
-            "Sec-Fetch-User": "?1",
-            "Referer": "https://www.nih.gov/",
-            "DNT": "1"
+            "Sec-Fetch-Site": "cross-site",
+            "Sec-Fetch-User": "?1"
+        },
+        "proxies": [],  # 代理表
+        "validation": {
+            "required_fields": ["title", "content"],
+            "min_content_length": 100,
+            "max_content_length": 100000,
+            "max_title_length": 200
+        },
+        # 数据源URL配置
+        "urls": {
+            "nih_base_url": "https://search.nih.gov/search",
+            "pubmed_base_url": "https://pubmed.ncbi.nlm.nih.gov",
+            "who_base_url": "https://www.who.int/publications/i/search",
+            "cdc_base_url": "https://search.cdc.gov/search",
+            "cnki_base_url": "https://kns.cnki.net/kns8/defaultresult/index",
+            "medline_base_url": "https://medlineplus.gov/encyclopedia.html",
+            "guidelines_base_url": "https://www.guidelines.gov/search"
+        },
+        # 请求参数配置
+        "params": {
+            "nih": {
+                "affiliate": "nih",
+                "query": ""
+            },
+            "pubmed": {
+                "term": ""
+            },
+            "who": {
+                "query": "",
+                "page": "1",
+                "pagesize": "10",
+                "sortBy": "relevance"
+            },
+            "cdc": {
+                "affiliate": "cdc-main",
+                "query": ""
+            },
+            "cnki": {
+                "kw": "",
+                "crossdb": "1"
+            }
         }
     }
     
-    # 存储路径配置
-    STORAGE_ROOT = Path("/root/autodl-tmp/medical_ai_system")
-    STORAGE_PATHS = {
-        "diseases": STORAGE_ROOT / "diseases.jsonl",
-        "templates": STORAGE_ROOT / "templates",
-        "embeddings": STORAGE_ROOT / "embeddings",
-        "raw_data": STORAGE_ROOT / "raw_data"
-    }
+    # 日志配置
+    LOG_LEVEL = "INFO"
+    LOG_FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    
+    def init_dirs(self):
+        """初始化目录"""
+        for path in self.STORAGE_PATHS.values():
+            path.mkdir(parents=True, exist_ok=True)

@@ -1,0 +1,2 @@
+2024-12-23 18:38:16,129 - DBOptimizer - INFO - 开始优化数据库: /root/medical_ai/data/medical_records.db
+2024-12-23 18:38:16,129 - DBOptimizer - ERROR - 数据库优化失败: unable to open database file

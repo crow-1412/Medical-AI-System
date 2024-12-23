@@ -1,61 +1,74 @@
+import os
 import asyncio
-import logging
-from pathlib import Path
+import torch
+import gradio as gr
+from interface.gradio_app import create_gradio_interface
 from config.config import Config
-from crawlers.medical_crawler import MedicalCrawler
 
-# 配置日志
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler('crawler.log'),
-        logging.StreamHandler()
-    ]
-)
+def check_dependencies() -> bool:
+    """检查必要的依赖是否满足"""
+    try:
+        # 检查必要的Python包
+        import torch
+        import gradio
+        import transformers
+        import jieba
+        
+        print("所有依赖项检查通过！")
+        return True
+        
+    except ImportError as e:
+        print(f"缺少必要的依赖项: {str(e)}")
+        return False
+
+def setup_environment():
+    """设置运行环境"""
+    print("正在设置运行环境...")
+    
+    # 检查CUDA是否可用
+    if torch.cuda.is_available():
+        n_gpus = torch.cuda.device_count()
+        print(f"检测到 {n_gpus} 个 GPU 设备:")
+        for i in range(n_gpus):
+            gpu_name = torch.cuda.get_device_name(i)
+            memory = torch.cuda.get_device_properties(i).total_memory / (1024**3)
+            print(f"  GPU {i}: {gpu_name}")
+            print(f"  显存: {memory:.1f}GB")
+    else:
+        print("未检测到 GPU 设备，将使用 CPU 运行")
+    
+    print("环境设置完成！\n")
 
 async def main():
-    # 医学关键词列表
-    keywords = [
-        {
-            "zh": "高血压",
-            "en": "hypertension"
-        },
-        {
-            "zh": "糖尿病",
-            "en": "diabetes"
-        },
-        {
-            "zh": "冠心病",
-            "en": "coronary heart disease"
-        }
-    ]  # 可以根据需要添加更多关键词
+    """主函数"""
+    # 1. 检查依赖
+    if not check_dependencies():
+        return
+        
+    # 2. 设置环境
+    setup_environment()
     
-    try:
-        # 初始化爬虫
-        crawler = MedicalCrawler(Config)
-        logging.info(f"开始爬取数据，关键词：{[k['zh'] for k in keywords]}")
-        
-        # 使用英文关键词爬取
-        en_keywords = [k['en'] for k in keywords]
-        await crawler.run_crawler(en_keywords)
-        
-        # 检查结果
-        raw_data_path = Config.STORAGE_PATHS["raw_data"]
-        files = list(raw_data_path.glob("*.jsonl"))
-        
-        logging.info("\n爬取结果：")
-        total_records = 0
-        for file in files:
-            line_count = sum(1 for _ in open(file, 'r', encoding='utf-8'))
-            total_records += line_count
-            logging.info(f"{file.name}: {line_count} 条记录")
-            
-        logging.info(f"总计爬取: {total_records} 条记录")
-        
-    except Exception as e:
-        logging.error(f"爬虫运行出错: {str(e)}", exc_info=True)
-        raise e
+    # 3. 创建必要的目录
+    os.makedirs("/root/autodl-tmp/medical_ai_system", exist_ok=True)
+    
+    # 4. 创建Gradio界面
+    print("正在启动 Web 界面...")
+    demo = await create_gradio_interface()
+    
+    # 5. 启动服务
+    print("\n系统启动完成！")
+    print("访问说明:")
+    print("1. 本地访问: http://localhost:7860")
+    print("2. 远程访问:")
+    print("   - 在 AutoDL 控制台中找到'开放端口'")
+    print("   - 将端口 7860 映射到公网")
+    print("   - 使用 AutoDL 提供的访问地址\n")
+    
+    demo.launch(
+        server_name="0.0.0.0",
+        share=False,
+        show_error=True
+    )
 
 if __name__ == "__main__":
     asyncio.run(main()) 

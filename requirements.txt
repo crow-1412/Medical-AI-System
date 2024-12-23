@@ -1,0 +1,17 @@
+torch==2.2.1
+transformers==4.36.2
+peft==0.7.1
+accelerate==0.25.0
+bitsandbytes==0.41.3
+sentencepiece==0.1.99
+protobuf==4.25.1
+gradio==4.12.0
+sentence-transformers==2.2.2
+chromadb==0.4.22
+numpy
+pandas
+matplotlib
+seaborn
+jieba
+aiohttp
+beautifulsoup4
